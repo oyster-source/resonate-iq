@@ -1,9 +1,8 @@
-
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 
-const execAsync = promisify(exec) as unknown as (command: string) => Promise<{ stdout: string; stderr: string }>;
+const execFileAsync = promisify(execFile);
 
 export interface PythonBridgeResponse<T = any> {
     success: boolean;
@@ -27,19 +26,17 @@ export class AIBridge {
         try {
             const scriptPath = path.join(this.executionDir, scriptName);
 
-            let command = `python "${scriptPath}"`;
+            const scriptArgs: string[] = [];
 
             for (const [key, value] of Object.entries(args)) {
                 if (value !== undefined && value !== null) {
-                    // Basic shell escaping/quoting
-                    const escapedValue = String(value).replace(/"/g, '\\"');
-                    command += ` --${key} "${escapedValue}"`;
+                    scriptArgs.push(`--${key}`, String(value));
                 }
             }
 
-            console.log(`[AIBridge] Executing: ${command}`);
+            console.log(`[AIBridge] Executing: python ${scriptPath} ${scriptArgs.join(' ')}`);
 
-            const { stdout, stderr } = await execAsync(command);
+            const { stdout, stderr } = await execFileAsync('python', [scriptPath, ...scriptArgs]);
 
             if (stderr && !stdout) {
                 console.error(`[AIBridge] Script stderr: ${stderr}`);
