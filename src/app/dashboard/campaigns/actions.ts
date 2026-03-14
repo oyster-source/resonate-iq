@@ -86,5 +86,6 @@ export async function createCampaign(data: CampaignData) {
     }
 
     revalidatePath('/dashboard/campaigns')
-    redirect('/dashboard/campaigns')
+    revalidatePath('/dashboard/campaigns')
+    return { success: true }
 }

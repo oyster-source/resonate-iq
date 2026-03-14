@@ -30,11 +30,14 @@ export async function addLeadsToCampaign(campaignId: string, leadIds: string[]) 
     // Actually, let's just insert. If error, we catch it.
     // Ideally we'd use upsert or ignore.
 
-    const { error } = await supabase.from('campaign_leads').insert(rows)
+    const { error } = await supabase
+        .from('campaign_leads')
+        .upsert(rows, { onConflict: 'campaign_id, lead_id', ignoreDuplicates: true })
+        .select()
 
     if (error) {
         console.error("Failed to add leads to campaign", error)
-        return { error: "Failed to add leads to campaign" }
+        return { error: "Failed to add leads (or some already exist)" }
     }
 
     revalidatePath(`/dashboard/campaigns`)

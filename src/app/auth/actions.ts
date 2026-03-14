@@ -43,6 +43,7 @@ export async function signup(formData: FormData) {
     })
 
     if (error) {
+        console.error("Supabase Signup Error:", error)
         redirect('/signup?error=Could not create user')
     }
 

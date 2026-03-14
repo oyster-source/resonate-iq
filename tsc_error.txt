@@ -1,4 +1,4 @@
-.next/dev/types/validator.ts(5,50): error TS2305: Module '"./routes.js"' has no exported member 'AppRouteHandlerRoutes'.
+﻿.next/dev/types/validator.ts(5,50): error TS2305: Module '"./routes.js"' has no exported member 'AppRouteHandlerRoutes'.
 .next/dev/types/validator.ts(40,59): error TS2536: Type 'Route' cannot be used to index type 'ParamMap'.
 .next/dev/types/validator.ts(41,60): error TS2536: Type 'Route' cannot be used to index type 'ParamMap'.
 .next/dev/types/validator.ts(42,59): error TS2536: Type 'Route' cannot be used to index type 'ParamMap'.

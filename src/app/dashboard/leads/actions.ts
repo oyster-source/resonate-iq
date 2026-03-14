@@ -59,7 +59,7 @@ export async function addLeads(formData: FormData) {
 
     if (error) {
         console.error('Error adding leads:', error)
-        return { error: 'Failed to add leads' }
+        return { error: `Failed to add leads: ${error.message || JSON.stringify(error)}` }
     }
 
     revalidatePath('/dashboard/leads')

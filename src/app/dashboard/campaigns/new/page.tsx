@@ -48,10 +48,10 @@ export default function NewCampaignPage() {
                 steps: formData.sequence
             });
 
-            if (result.success) {
-                router.push('/dashboard/campaigns');
+            if ('error' in result) {
+                alert("Failed to create campaign: " + result.error);
             } else {
-                alert("Failed to create campaign");
+                router.push('/dashboard/campaigns');
             }
         });
     };

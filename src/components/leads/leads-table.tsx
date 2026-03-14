@@ -2,11 +2,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { LeadImportModal } from "@/components/leads/lead-import-modal";
 import { AddToCampaignModal } from "@/components/leads/add-to-campaign-modal";
-import { Building2, Filter, Link as LinkIcon, MoreVertical, Search, Shield, ShieldAlert, ShieldCheck, Mail, CheckSquare, Square, Play } from "lucide-react";
+import { Building2, Filter, Link as LinkIcon, MoreVertical, Search, Shield, ShieldAlert, ShieldCheck, Mail, CheckSquare, Square, Play, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type Lead = {
     id: string;
@@ -15,7 +17,9 @@ type Lead = {
     email: string | null;
     linkedin_url: string;
     status: string;
-    campaign_name?: string; // We might join this? or just show "Assigned"
+    campaign_name?: string;
+    score?: number | null;
+    score_reason?: string | null;
 };
 
 type Campaign = {
@@ -29,9 +33,11 @@ interface LeadsTableProps {
 }
 
 export function LeadsTable({ leads, activeCampaigns }: LeadsTableProps) {
+    const router = useRouter();
     const [isImportOpen, setIsImportOpen] = useState(false);
     const [isAddToCampaignOpen, setIsAddToCampaignOpen] = useState(false);
     const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+    const [processingId, setProcessingId] = useState<string | null>(null);
 
     const toggleSelectAll = () => {
         if (selectedLeads.size === leads.length) {
@@ -49,6 +55,97 @@ export function LeadsTable({ leads, activeCampaigns }: LeadsTableProps) {
             newSelected.add(id);
         }
         setSelectedLeads(newSelected);
+    };
+
+
+    const handleEnrich = async (leadId: string) => {
+        setProcessingId(leadId);
+        const toastId = toast.loading("Enriching lead...");
+
+        try {
+            const response = await fetch('/api/leads/enrich', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leadId })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                toast.error("Enrichment failed: " + (err.error || "Unknown error"), { id: toastId });
+                return;
+            }
+
+            toast.success("Lead enriched successfully!", { id: toastId });
+            router.refresh();
+        } catch (error) {
+            console.error("Enrichment error:", error);
+            toast.error("Enrichment error", { id: toastId });
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+
+    const handleGenerateEmail = async (leadId: string) => {
+        setProcessingId(leadId);
+        const toastId = toast.loading("Drafting email...");
+
+        try {
+            const response = await fetch('/api/leads/generate-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leadId })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                toast.error("Generation failed: " + (err.error || "Unknown error"), { id: toastId });
+                return;
+            }
+
+            const data = await response.json();
+            toast.success("Email Drafted!", {
+                id: toastId,
+                description: `Subject: ${data.data.subject}`
+            });
+            router.refresh();
+        } catch (error) {
+            console.error("Generation error:", error);
+            toast.error("Generation error", { id: toastId });
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleScore = async (leadId: string) => {
+        setProcessingId(leadId);
+        const toastId = toast.loading("Scoring lead...");
+
+        try {
+            const response = await fetch('/api/leads/score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leadId })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                toast.error("Scoring failed: " + (err.error || "Unknown error"), { id: toastId });
+                return;
+            }
+
+            const data = await response.json();
+            toast.success(`Leads Scored: ${data.score}/100`, {
+                id: toastId,
+                description: data.reason
+            });
+            router.refresh();
+        } catch (error) {
+            console.error("Scoring error:", error);
+            toast.error("Scoring error", { id: toastId });
+        } finally {
+            setProcessingId(null);
+        }
     };
 
     return (
@@ -121,6 +218,7 @@ export function LeadsTable({ leads, activeCampaigns }: LeadsTableProps) {
                                     </th>
                                     <th className="px-6 py-4 font-medium">Name & Title</th>
                                     <th className="px-6 py-4 font-medium">Company</th>
+                                    <th className="px-6 py-4 font-medium text-center">Score</th>
                                     <th className="px-6 py-4 font-medium">Email Status</th>
                                     <th className="px-6 py-4 font-medium">LinkedIn</th>
                                     <th className="px-6 py-4 font-medium text-right">Actions</th>
@@ -132,6 +230,7 @@ export function LeadsTable({ leads, activeCampaigns }: LeadsTableProps) {
                                     const name = `${enrichment.first_name || ''} ${enrichment.last_name || ''}`.trim() || 'Unknown Lead';
                                     const title = enrichment.title || 'Unknown Title';
                                     const company = enrichment.company || 'Unknown Company';
+                                    const hasDraft = !!enrichment.email_draft;
 
                                     return (
                                         <tr key={lead.id} className="group hover:bg-white/5 transition-colors">
@@ -154,9 +253,29 @@ export function LeadsTable({ leads, activeCampaigns }: LeadsTableProps) {
                                                     <span className="text-gray-300">{company}</span>
                                                 </div>
                                             </td>
+                                            <td className="px-6 py-4 text-center">
+                                                {lead.score !== undefined && lead.score !== null ? (
+                                                    <div className="flex flex-col items-center group/score relative cursor-help">
+                                                        <span className={cn(
+                                                            "px-2 py-0.5 rounded text-xs font-bold",
+                                                            lead.score >= 80 ? "bg-green-500/10 text-green-400 border border-green-500/20" :
+                                                                lead.score >= 50 ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" :
+                                                                    "bg-red-500/10 text-red-400 border border-red-500/20"
+                                                        )}>
+                                                            {lead.score}
+                                                        </span>
+                                                        {lead.score_reason && (
+                                                            <div className="absolute bottom-full mb-2 hidden group-hover/score:block w-48 p-2 bg-gray-900 border border-gray-800 rounded shadow-xl text-xs text-gray-300 z-10">
+                                                                {lead.score_reason}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-600 text-xs">-</span>
+                                                )}
+                                            </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
-                                                    {/* Logic for status icon... mocking for now as we don't strictly have email verification status yet */}
                                                     {lead.email ? <ShieldCheck className="w-4 h-4 text-green-400" /> : <ShieldAlert className="w-4 h-4 text-gray-600" />}
                                                     <span className={`text-sm ${lead.email ? "text-gray-300" : "text-gray-600"}`}>
                                                         {lead.email || "No Email"}
@@ -171,9 +290,34 @@ export function LeadsTable({ leads, activeCampaigns }: LeadsTableProps) {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <button className="text-gray-500 hover:text-white transition-colors">
-                                                    <MoreVertical className="w-4 h-4" />
-                                                </button>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleEnrich(lead.id)}
+                                                        disabled={!!processingId}
+                                                        className="text-xs bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 px-2 py-1 rounded border border-indigo-500/20 transition-colors disabled:opacity-50"
+                                                    >
+                                                        {processingId === lead.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Enrich"}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleScore(lead.id)}
+                                                        disabled={!!processingId}
+                                                        className="text-xs bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 px-2 py-1 rounded border border-purple-500/20 transition-colors disabled:opacity-50"
+                                                    >
+                                                        {processingId === lead.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Score"}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleGenerateEmail(lead.id)}
+                                                        disabled={!!processingId}
+                                                        className={cn(
+                                                            "text-xs px-2 py-1 rounded border transition-colors disabled:opacity-50",
+                                                            hasDraft
+                                                                ? "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20"
+                                                                : "bg-white/5 text-gray-300 border-white/10 hover:bg-white/10"
+                                                        )}
+                                                    >
+                                                        {processingId === lead.id ? <Loader2 className="w-3 h-3 animate-spin" /> : (hasDraft ? "View Draft" : "Draft Email")}
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     )

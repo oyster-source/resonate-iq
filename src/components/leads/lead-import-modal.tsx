@@ -48,8 +48,11 @@ export function LeadImportModal({ onClose }: { onClose: () => void }) {
         return data.map(row => {
             // Flexible matching for common column names
             const get = (keys: string[]) => {
-                const key = keys.find(k => row[k] || row[k.toLowerCase()] || row[k.toUpperCase()] || row[k.charAt(0).toUpperCase() + k.slice(1)]);
-                return key ? row[key] : undefined;
+                const rowKeys = Object.keys(row);
+                const matchingKey = rowKeys.find(rk =>
+                    keys.some(k => rk.toLowerCase().trim() === k.toLowerCase().trim())
+                );
+                return matchingKey ? row[matchingKey] : undefined;
             };
 
             return {

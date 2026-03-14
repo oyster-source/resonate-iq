@@ -4,18 +4,39 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Plus, Search, Filter, MoreVertical, Play, Pause, CheckCircle, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatDistanceToNow } from "date-fns";
+import { RunCampaignButton } from "@/components/campaigns/run-campaign-button";
 
 export default async function CampaignsPage() {
     const supabase = await createClient();
 
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Fetch campaigns
+    // Fetch campaigns and their sent counts
     const { data: campaigns } = await supabase
+        .from('campaigns')
+        .select(`
+            id, name, description, status, created_at,
+            email_logs!inner(id)
+        `)
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+    // The above might duplicate or be tricky with RLS/Count. 
+    // Let's do a more robust fetch
+    const { data: rawCampaigns } = await supabase
         .from('campaigns')
         .select('*')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
+
+    const campaignsWithStats = await Promise.all((rawCampaigns || []).map(async (c) => {
+        const { count } = await supabase
+            .from('email_logs')
+            .select('*', { count: 'exact', head: true })
+            .eq('campaign_id', c.id)
+            .eq('status', 'sent');
+        return { ...c, sentCount: count || 0 };
+    }));
 
     return (
         <div className="space-y-6">
@@ -24,13 +45,16 @@ export default async function CampaignsPage() {
                     <h1 className="text-3xl font-bold tracking-tight text-white">Campaigns</h1>
                     <p className="text-gray-400 mt-1">Manage and monitor your outreach sequences.</p>
                 </div>
-                <Link
-                    href="/dashboard/campaigns/new"
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-lg shadow-indigo-500/20"
-                >
-                    <Plus className="w-4 h-4" />
-                    New Campaign
-                </Link>
+                <div className="flex gap-2">
+                    <RunCampaignButton />
+                    <Link
+                        href="/dashboard/campaigns/new"
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-lg shadow-indigo-500/20"
+                    >
+                        <Plus className="w-4 h-4" />
+                        New Campaign
+                    </Link>
+                </div>
             </div>
 
             {/* Filters and Search */}
@@ -50,7 +74,7 @@ export default async function CampaignsPage() {
             </div>
 
             <GlassCard className="overflow-hidden min-h-[400px]">
-                {!campaigns || campaigns.length === 0 ? (
+                {!campaignsWithStats || campaignsWithStats.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full py-20 text-center">
                         <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
                             <Mail className="w-8 h-8 text-gray-500" />
@@ -72,14 +96,14 @@ export default async function CampaignsPage() {
                                     <th className="px-6 py-4 font-medium">Campaign Name</th>
                                     <th className="px-6 py-4 font-medium">Status</th>
                                     <th className="px-6 py-4 font-medium">Created</th>
-                                    <th className="px-6 py-4 font-medium">Sent (Mock)</th>
-                                    <th className="px-6 py-4 font-medium">Open Rate (Mock)</th>
-                                    <th className="px-6 py-4 font-medium">Reply Rate (Mock)</th>
+                                    <th className="px-6 py-4 font-medium">Sent (Real)</th>
+                                    <th className="px-6 py-4 font-medium">Open Rate</th>
+                                    <th className="px-6 py-4 font-medium">Reply Rate</th>
                                     <th className="px-6 py-4 font-medium text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
-                                {campaigns.map((campaign) => (
+                                {campaignsWithStats.map((campaign) => (
                                     <tr key={campaign.id} className="group hover:bg-white/5 transition-colors">
                                         <td className="px-6 py-4">
                                             <div>
@@ -108,8 +132,7 @@ export default async function CampaignsPage() {
                                         <td className="px-6 py-4 text-gray-400">
                                             {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
                                         </td>
-                                        {/* Mock Data for stats until we have a real sending engine */}
-                                        <td className="px-6 py-4 text-gray-300">0</td>
+                                        <td className="px-6 py-4 text-gray-300 font-mono">{campaign.sentCount}</td>
                                         <td className="px-6 py-4 text-gray-300">0%</td>
                                         <td className="px-6 py-4 text-gray-300">0%</td>
                                         <td className="px-6 py-4 text-right">
