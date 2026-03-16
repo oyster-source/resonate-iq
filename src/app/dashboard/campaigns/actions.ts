@@ -19,7 +19,7 @@ export type CampaignData = {
     }[];
 }
 
-export async function createCampaign(data: CampaignData) {
+export async function createCampaign(data: CampaignData): Promise<{ success: true } | { error: string }> {
     const supabase = await createClient()
 
     const { data: { user } } = await supabase.auth.getUser()
